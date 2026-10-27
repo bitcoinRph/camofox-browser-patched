@@ -1,8 +1,10 @@
 # Browser CI provenance
 
-The non-publishing `browser-tests.yml` workflow uses Node 22, matching the
-production Dockerfiles and the package's minimum supported Node major. Other
-pre-existing workflows are unchanged by this hardening pass.
+The non-publishing `browser-tests.yml` workflow uses Node 24 because the pinned
+OpenClaw development dependency requires Node >=24.16 for the full test suite.
+The production Dockerfiles remain on the package's supported Node 22 runtime and
+install production dependencies only. Other pre-existing workflows are unchanged
+by this hardening pass.
 
 ## Action pins
 

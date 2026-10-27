@@ -5,8 +5,8 @@ const workflow = () => existsSync(file) ? readFileSync(file, 'utf8') : '';
 
 test('browser CI runs the canonical test and MCP gates in a GTK/Xvfb environment', () => {
   const source = workflow();
-  expect(source).toContain('container: node:22-trixie');
-  expect(source).toMatch(/node-version: 22\s/);
+  expect(source).toContain('container: node:24-trixie');
+  expect(source).toMatch(/node-version: 24\s/);
   expect(source).toContain('libgtk-3-0');
   expect(source).toContain('libnss3');
   expect(source).toContain('xvfb');
