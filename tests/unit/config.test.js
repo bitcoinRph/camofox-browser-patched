@@ -92,6 +92,17 @@ describe('loadConfig', () => {
     expect(config.serverEnv.CAMOFOX_EVALUATE_MAX_BODY_SIZE).toBe('10mb');
   });
 
+  test.each(['SESSION_TIMEOUT_MS', 'BROWSER_IDLE_TIMEOUT_MS', 'TAB_INACTIVITY_MS'])(
+    'forwards %s unchanged to the launched server', (name) => {
+      for (const value of ['0', '900000']) {
+        process.env[name] = value;
+        expect(loadConfig().serverEnv[name]).toBe(value);
+      }
+      delete process.env[name];
+      expect(loadConfig().serverEnv[name]).toBeUndefined();
+    },
+  );
+
   test('preserves zero timeout values to disable session expiry and idle shutdown', () => {
     process.env.SESSION_TIMEOUT_MS = '0';
     process.env.BROWSER_IDLE_TIMEOUT_MS = '0';

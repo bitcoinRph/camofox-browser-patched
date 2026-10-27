@@ -710,7 +710,7 @@ Browser Instance (Camoufox)
         \-- Tab (amazon.com)
 ```
 
-Sessions auto-expire after 30 minutes of inactivity. The browser itself shuts down after 5 minutes with no active sessions, and relaunches on the next request.
+Sessions auto-expire after 10 minutes of inactivity by default (`SESSION_TIMEOUT_MS`; 0 disables expiry). Tabs close after 5 minutes of inactivity (`TAB_INACTIVITY_MS`). The browser itself shuts down after 5 minutes with no active sessions (`BROWSER_IDLE_TIMEOUT_MS`; 0 disables shutdown), and relaunches on the next request. These environment variables are also forwarded when the plugin launches the server subprocess.
 
 When a session's tab limit is reached, the oldest/least-used tab is automatically recycled instead of returning an error -- so long-running agent sessions don't hit dead ends.
 

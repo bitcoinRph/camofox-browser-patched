@@ -432,7 +432,7 @@
                   },
                   "url": {
                     "type": "string",
-                    "description": "Optional initial URL."
+                    "description": "Optional initial HTTP/HTTPS URL. If supplied, must be a non-empty string; invalid values are rejected before session or tab creation."
                   },
                   "trace": {
                     "type": "boolean",
@@ -451,6 +451,10 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "downloadStarted": {
+                      "type": "boolean",
+                      "description": "Present and true when navigation starts a browser download instead of loading a document. Retrieve its artifact from the tab downloads endpoint."
+                    },
                     "tabId": {
                       "type": "string"
                     },
@@ -567,7 +571,7 @@
           "Navigation"
         ],
         "summary": "Navigate a tab to a URL or macro",
-        "description": "Navigate to a URL or expand a search macro. Auto-creates tab if not found.",
+        "description": "Navigate an existing tab to a URL or expand a search macro. Invalid URLs are rejected before browser or tab side effects. A supplied URL must be a non-empty HTTP/HTTPS string, even when a macro is also provided.",
         "parameters": [
           {
             "name": "tabId",
@@ -621,6 +625,10 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "downloadStarted": {
+                      "type": "boolean",
+                      "description": "Present and true when navigation starts a browser download instead of loading a document. The url remains the current document URL; retrieve the artifact from the tab downloads endpoint."
+                    },
                     "ok": {
                       "type": "boolean"
                     },
@@ -2740,6 +2748,7 @@
           "Legacy"
         ],
         "summary": "Open tab (OpenClaw format)",
+        "description": "Opens a tab and navigates it to url. When the URL starts a browser download instead of a document navigation, the tab is still opened and the response includes downloadStarted true; retrieve the artifact from the tab downloads endpoint.",
         "deprecated": true,
         "requestBody": {
           "required": true,
@@ -2768,11 +2777,17 @@
         },
         "responses": {
           "200": {
-            "description": "Tab opened.",
+            "description": "Tab opened, including downloadStarted true when a browser download starts instead of a document navigation.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "properties": {
+                    "downloadStarted": {
+                      "type": "boolean",
+                      "description": "Present and true only when navigation started a browser download."
+                    }
+                  }
                 }
               }
             }
@@ -2882,7 +2897,7 @@
           "Legacy"
         ],
         "summary": "Navigate (OpenClaw format)",
-        "description": "Navigate with targetId in body instead of path param.",
+        "description": "Navigate with targetId in body instead of path param. Invalid or non-string HTTP/HTTPS URLs return 400 before tab side effects. Downloads return success with downloadStarted true; retrieve the artifact from the tab downloads endpoint.",
         "deprecated": true,
         "requestBody": {
           "required": true,
@@ -2911,7 +2926,7 @@
         },
         "responses": {
           "200": {
-            "description": "Navigation result.",
+            "description": "Navigation result, including downloadStarted true when a browser download starts instead of a document navigation.",
             "content": {
               "application/json": {
                 "schema": {

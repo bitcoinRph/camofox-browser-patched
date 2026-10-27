@@ -36,6 +36,26 @@ function createTestApp() {
     `);
   });
   
+  // Legacy frameset documents have a frameset root rather than a body.
+  app.get('/frameset', (req, res) => {
+    res.send(`<!DOCTYPE html><html><head><title>Local frameset</title></head>
+      <frameset cols="50%,50%">
+        <frame name="left" src="/pageA">
+        <frame name="right" src="/typing">
+      </frameset></html>`);
+  });
+
+  // Nested framesets have several frameset elements; only the root one is the document root.
+  app.get('/frameset-nested', (req, res) => {
+    res.send(`<!DOCTYPE html><html><head><title>Nested frameset</title></head>
+      <frameset rows="100%">
+        <frameset cols="50%,50%">
+          <frame name="left" src="/pageA">
+          <frame name="right" src="/typing">
+        </frameset>
+      </frameset></html>`);
+  });
+
   // A deterministic upstream failure for navigation error handling tests.
   app.get('/unavailable', (req, res) => {
     res.status(503).send('Temporarily unavailable');
