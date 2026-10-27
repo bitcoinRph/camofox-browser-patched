@@ -49,3 +49,13 @@ test('browser CI smoke-tests a real server tab without publishing', () => {
   expect(source).not.toMatch(/packages: write|contents: write|docker (?:push|login)|push: true|npm publish/);
   expect(source).toContain('workflow_dispatch:');
 });
+
+test('browser CI resets its shared-library evidence before appending every check', () => {
+  const source = workflow();
+  const reset = source.indexOf(': > libraries.log');
+  const loop = source.indexOf('for library in camoufox-bin libxul.so libmozgtk.so; do');
+  expect(reset).toBeGreaterThanOrEqual(0);
+  expect(reset).toBeLessThan(loop);
+  expect(source).toContain('ldd "$CACHE/$library" | tee -a libraries.log');
+  expect(source).not.toContain('| tee libraries.log');
+});

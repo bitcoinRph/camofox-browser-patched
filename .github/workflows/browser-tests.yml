@@ -46,8 +46,9 @@ jobs:
           RELEASE=$(node --input-type=module -e "import {BUNDLED_CAMOUFOX_RELEASE} from './lib/camoufox-download.js'; console.log(BUNDLED_CAMOUFOX_RELEASE)")
           node --input-type=module -e "import assert from 'node:assert/strict'; import fs from 'node:fs'; const v=JSON.parse(fs.readFileSync(process.argv[1])); assert.equal(v.version+'-'+v.release, process.argv[2])" "$CACHE/version.json" "$RELEASE"
           export LD_LIBRARY_PATH="$CACHE${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          : > libraries.log
           for library in camoufox-bin libxul.so libmozgtk.so; do
-            ldd "$CACHE/$library" | tee libraries.log
+            ldd "$CACHE/$library" | tee -a libraries.log
             if grep -q 'not found' libraries.log; then exit 1; fi
           done
           "$CACHE"/camoufox-bin --version | tee browser-version.log

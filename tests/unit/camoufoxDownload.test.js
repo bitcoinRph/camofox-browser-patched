@@ -4,6 +4,18 @@ import path from 'node:path';
 import os from 'node:os';
 import { OS_NAME, CamoufoxFetcher } from 'camoufox-js/dist/pkgman.js';
 import { BUNDLED_CAMOUFOX_RELEASE, CompatibleCamoufoxFetcher } from '../../lib/camoufox-download.js';
+import { CAMOUFOX_ASSET_SHA256 } from '../../lib/camoufox-integrity.js';
+
+test('pins exactly the six official beta.30 archive asset names', () => {
+  expect(Object.keys(CAMOUFOX_ASSET_SHA256).sort()).toEqual([
+    'camoufox-152.0.4-beta.30-lin.arm64.zip',
+    'camoufox-152.0.4-beta.30-lin.x86_64.zip',
+    'camoufox-152.0.4-beta.30-mac.arm64.zip',
+    'camoufox-152.0.4-beta.30-mac.x86_64.zip',
+    'camoufox-152.0.4-beta.30-win.i686.zip',
+    'camoufox-152.0.4-beta.30-win.x86_64.zip',
+  ]);
+});
 
 describe('bundled Camoufox release selection', () => {
   test('accepts the pinned binary and rejects newer incompatible releases', () => {
