@@ -16,6 +16,10 @@ jobs:
     # dependency requires Node >=24.16 for the full test suite.
     container: node:24-trixie
     timeout-minutes: 30
+    env:
+      # GitHub's container runner defaults HOME to /github/home (uid 1001),
+      # while the job runs as root. Firefox refuses that ownership mismatch.
+      HOME: /root
     defaults:
       run:
         shell: bash

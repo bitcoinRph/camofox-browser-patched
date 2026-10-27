@@ -7,6 +7,7 @@ test('browser CI runs the canonical test and MCP gates in a GTK/Xvfb environment
   const source = workflow();
   expect(source).toContain('container: node:24-trixie');
   expect(source).toMatch(/node-version: 24\s/);
+  expect(source).toMatch(/HOME:\s*\/root/);
   expect(source).toContain('libgtk-3-0');
   expect(source).toContain('libnss3');
   expect(source).toContain('xvfb');
