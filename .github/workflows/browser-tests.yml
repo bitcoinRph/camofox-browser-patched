@@ -1,0 +1,60 @@
+name: Browser tests (no publishing)
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [master, 'startos/**']
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    container: node:24-trixie
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install GTK, NSS and Xvfb libraries
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            libgtk-3-0 libnss3 libdbus-glib-1-2 libxt6 libasound2 \
+            libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxfixes3 \
+            libxi6 libxrandr2 libxrender1 libxss1 libxtst6 \
+            libegl1 libgl1-mesa-dri libgbm1 xvfb xauth \
+            fonts-liberation fonts-noto-color-emoji ca-certificates curl unzip \
+            build-essential python3
+      - name: Install dependencies and bundled Camoufox
+        run: |
+          npm ci
+          npm install --no-save jest-junit@17.0.0
+          npm run fetch-bin
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Verify bundled browser version and shared libraries
+        run: |
+          CACHE=$(node --input-type=module -e "import {loadConfig} from './lib/config.js'; console.log(loadConfig().camoufoxCacheDir)")
+          RELEASE=$(node --input-type=module -e "import {BUNDLED_CAMOUFOX_RELEASE} from './lib/camoufox-download.js'; console.log(BUNDLED_CAMOUFOX_RELEASE)")
+          node --input-type=module -e "import assert from 'node:assert/strict'; import fs from 'node:fs'; const v=JSON.parse(fs.readFileSync(process.argv[1])); assert.equal(v.version+'-'+v.release, process.argv[2])" "$CACHE/version.json" "$RELEASE"
+          export LD_LIBRARY_PATH="$CACHE${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          for library in camoufox-bin libxul.so libmozgtk.so; do
+            ldd "$CACHE/$library" | tee libraries.log
+            if grep -q 'not found' libraries.log; then exit 1; fi
+          done
+          "$CACHE"/camoufox-bin --version | tee browser-version.log
+          grep -F "$RELEASE" browser-version.log
+      - name: Run canonical unit, E2E and plugin tests
+        run: npm test
+      - name: Run standalone MCP tests
+        run: npm run test:mcp
+      - name: Smoke-test a real server and browser tab
+        run: node scripts/smoke-browser.mjs
