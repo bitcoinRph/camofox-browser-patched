@@ -2,6 +2,8 @@ import { readFileSync, existsSync } from 'node:fs';
 
 const file = new URL('../../.github/workflows/browser-tests.yml', import.meta.url);
 const workflow = () => existsSync(file) ? readFileSync(file, 'utf8') : '';
+const publishFile = new URL('../../.github/workflows/startos-image.yml', import.meta.url);
+const publishWorkflow = () => existsSync(publishFile) ? readFileSync(publishFile, 'utf8') : '';
 
 test('browser CI runs the canonical test and MCP gates in a GTK/Xvfb environment', () => {
   const source = workflow();
@@ -59,4 +61,17 @@ test('browser CI resets its shared-library evidence before appending every check
   expect(reset).toBeLessThan(loop);
   expect(source).toContain('ldd "$CACHE/$library" | tee -a libraries.log');
   expect(source).not.toContain('| tee libraries.log');
+});
+
+test('StartOS image publishing is manual, immutable, and never tags latest', () => {
+  const source = publishWorkflow();
+  expect(source).toContain('workflow_dispatch:');
+  expect(source).toContain('ghcr.io/bitcoinrph/camofox-browser:1.18.1-startos.1');
+  expect(source).toContain('platforms: linux/amd64,linux/arm64');
+  expect(source).toContain('provenance: mode=max');
+  expect(source).toContain('sbom: true');
+  expect(source).not.toMatch(/:latest\b/);
+  for (const action of source.matchAll(/uses: ([^\s#]+)/g)) {
+    expect(action[1]).toMatch(/@[a-f0-9]{40}$/);
+  }
 });
