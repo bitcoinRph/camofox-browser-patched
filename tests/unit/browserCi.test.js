@@ -5,7 +5,8 @@ const workflow = () => existsSync(file) ? readFileSync(file, 'utf8') : '';
 
 test('browser CI runs the canonical test and MCP gates in a GTK/Xvfb environment', () => {
   const source = workflow();
-  expect(source).toContain('container: node:24-trixie');
+  expect(source).toContain('container: node:22-trixie');
+  expect(source).toMatch(/node-version: 22\s/);
   expect(source).toContain('libgtk-3-0');
   expect(source).toContain('libnss3');
   expect(source).toContain('xvfb');
@@ -13,6 +14,15 @@ test('browser CI runs the canonical test and MCP gates in a GTK/Xvfb environment
   expect(source).toContain('npm run fetch-bin');
   expect(source).toMatch(/run: npm test\s/);
   expect(source).toMatch(/run: npm run test:mcp\s/);
+});
+
+test('browser CI pins every action to a verified immutable release commit', () => {
+  const actions = [...workflow().matchAll(/uses: ([^\s#]+)/g)].map(match => match[1]);
+  expect(actions).toEqual([
+    'actions/checkout@11d5960a326750d5838078e36cf38b85af677262',
+    'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
+  ]);
+  for (const action of actions) expect(action).toMatch(/@[a-f0-9]{40}$/);
 });
 
 test('browser CI keeps the root lockfile active when installing its reporter', () => {

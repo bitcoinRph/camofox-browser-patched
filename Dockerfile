@@ -55,6 +55,7 @@ RUN apt-get update && apt-get install -y \
 # build dies three commands later on "unzip: cannot find zipfile directory", which
 # points at the archive rather than at the URL that was actually wrong. Note the Linux
 # BuildKit supplies TARGETARCH; map its names to Camoufox release asset names.
+COPY lib/camoufox-integrity.js /tmp/camoufox-integrity.mjs
 RUN case "${TARGETARCH}" in \
       amd64) CAMOUFOX_ARCH="x86_64" ;; \
       arm64) CAMOUFOX_ARCH="arm64" ;; \
@@ -62,6 +63,7 @@ RUN case "${TARGETARCH}" in \
     esac \
     && mkdir -p /root/.cache/camoufox \
     && curl -fL -o /tmp/camoufox.zip "https://github.com/daijro/camoufox/releases/download/v${CAMOUFOX_VERSION}-${CAMOUFOX_RELEASE}/camoufox-${CAMOUFOX_VERSION}-${CAMOUFOX_RELEASE}-lin.${CAMOUFOX_ARCH}.zip" \
+    && node /tmp/camoufox-integrity.mjs /tmp/camoufox.zip "camoufox-${CAMOUFOX_VERSION}-${CAMOUFOX_RELEASE}-lin.${CAMOUFOX_ARCH}.zip" \
     && (unzip -q /tmp/camoufox.zip -d /root/.cache/camoufox || true) \
     && rm /tmp/camoufox.zip \
     && chmod -R 755 /root/.cache/camoufox \
@@ -73,7 +75,7 @@ RUN case "${TARGETARCH}" in \
 WORKDIR /app
 
 COPY package.json package-lock.json postinstall.js ./
-COPY lib/camoufox-download.js ./lib/
+COPY lib/camoufox-download.js lib/camoufox-integrity.js ./lib/
 COPY scripts/ ./scripts/
 # better-sqlite3 has no prebuild matching this node/arch, so npm ci falls back to
 # `node-gyp rebuild`, which fails on node:*-slim with "Error: not found: make".

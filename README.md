@@ -129,8 +129,13 @@ make fetch
 
 # Override arch or version explicitly
 make up ARCH=x86_64
-make up VERSION=135.0.1 RELEASE=beta.24
+make up VERSION=152.0.4 RELEASE=beta.30
 ```
+
+The bundled npm downloader and Docker builds verify upstream-published archive
+SHA-256 digests before extraction. To override the release, first review and pin
+its published digests in `lib/camoufox-integrity.js`; unknown assets fail closed.
+See [.github/browser-tests-provenance.md](.github/browser-tests-provenance.md).
 
 #### Windows
 

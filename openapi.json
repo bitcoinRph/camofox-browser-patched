@@ -406,7 +406,7 @@
           "Tabs"
         ],
         "summary": "Create a new tab",
-        "description": "Creates a tab in the given session. Optionally navigates to an initial URL.",
+        "description": "Creates a tab in the given session. Optionally navigates to an initial URL. A browser download is not recorded as a visited document.",
         "requestBody": {
           "required": true,
           "content": {

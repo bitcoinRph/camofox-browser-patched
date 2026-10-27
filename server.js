@@ -2850,7 +2850,7 @@ app.post('/pressure/cleanup', async (req, res) => {
  *   post:
  *     tags: [Tabs]
  *     summary: Create a new tab
- *     description: Creates a tab in the given session. Optionally navigates to an initial URL.
+ *     description: Creates a tab in the given session. Optionally navigates to an initial URL. A browser download is not recorded as a visited document.
  *     requestBody:
  *       required: true
  *       content:
@@ -3045,7 +3045,7 @@ app.post('/tabs', async (req, res) => {
             throw navErr;
           }
         }
-        tabState.visitedUrls.add(url);
+        if (!downloadStarted) tabState.visitedUrls.add(url);
       }
       // The route deadline passed during navigation and the catch below has
       // begun discarding the tab, so do not announce it.

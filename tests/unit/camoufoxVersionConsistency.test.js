@@ -31,6 +31,11 @@ describe('Camoufox release defaults', () => {
       ],
     ];
 
+    assert.ok(
+      read('README.md').includes(`make up VERSION=${version} RELEASE=${release}`),
+      'README override example must use the tested bundled release',
+    );
+
     for (const [file, versionPattern, releasePattern] of defaults) {
       const source = read(file);
       assert.equal(capture(source, versionPattern, file), version, `${file} version`);
