@@ -129,8 +129,13 @@ make fetch
 
 # Override arch or version explicitly
 make up ARCH=x86_64
-make up VERSION=135.0.1 RELEASE=beta.24
+make up VERSION=152.0.4 RELEASE=beta.30
 ```
+
+The bundled npm downloader and Docker builds verify upstream-published archive
+SHA-256 digests before extraction. To override the release, first review and pin
+its published digests in `lib/camoufox-integrity.js`; unknown assets fail closed.
+See [.github/browser-tests-provenance.md](.github/browser-tests-provenance.md).
 
 #### Windows
 
@@ -710,7 +715,7 @@ Browser Instance (Camoufox)
         \-- Tab (amazon.com)
 ```
 
-Sessions auto-expire after 30 minutes of inactivity. The browser itself shuts down after 5 minutes with no active sessions, and relaunches on the next request.
+Sessions auto-expire after 10 minutes of inactivity by default (`SESSION_TIMEOUT_MS`; 0 disables expiry). Tabs close after 5 minutes of inactivity (`TAB_INACTIVITY_MS`). The browser itself shuts down after 5 minutes with no active sessions (`BROWSER_IDLE_TIMEOUT_MS`; 0 disables shutdown), and relaunches on the next request. These environment variables are also forwarded when the plugin launches the server subprocess.
 
 When a session's tab limit is reached, the oldest/least-used tab is automatically recycled instead of returning an error -- so long-running agent sessions don't hit dead ends.
 

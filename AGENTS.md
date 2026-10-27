@@ -111,7 +111,8 @@ Refs like `e1`, `e2` are stable identifiers for page elements:
 
 - `userId` isolates cookies/storage between users
 - `sessionKey` groups tabs by conversation/task (legacy: `listItemId` also accepted)
-- Sessions timeout after 30 minutes of inactivity
+- Sessions expire after 10 minutes of inactivity by default (`SESSION_TIMEOUT_MS`; 0 disables expiry)
+- Tabs close after 5 minutes of inactivity by default (`TAB_INACTIVITY_MS`)
 - Delete all user data: `DELETE /sessions/:userId`
 
 ## Running Engines

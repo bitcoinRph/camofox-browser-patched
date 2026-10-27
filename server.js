@@ -24,6 +24,7 @@ import {
   attachNavigationResponseTracker,
   readInlinePdfResponse,
   clickWithDownloadGuard,
+  navigateWithDownloadGuard,
   captureFetchedResource,
   MAX_FETCHED_RESOURCE_BYTES,
   getDownloadsList,
@@ -317,6 +318,7 @@ function sendError(res, err, extraFields = {}) {
 }
 
 function validateUrl(url) {
+  if (typeof url !== 'string' || !url.trim()) return 'url must be a non-empty string';
   try {
     const parsed = new URL(url);
     if (!ALLOWED_URL_SCHEMES.includes(parsed.protocol)) {
@@ -2072,7 +2074,8 @@ async function withPageLoadDuration(action, fn) {
 }
 
 async function navigatePage(page, url, { timeout = 30000 } = {}) {
-  const response = await page.goto(url, { waitUntil: 'commit', timeout });
+  const response = await navigateWithDownloadGuard(page, () => page.goto(url, { waitUntil: 'commit', timeout }));
+  if (response?.downloadStarted) return response;
   const contentType = response?.headers()?.['content-type']?.toLowerCase() || '';
   if (!contentType.startsWith('image/')) {
     await page.waitForLoadState('domcontentloaded', { timeout });
@@ -2382,13 +2385,13 @@ async function _buildRefsInner(page, refs, start) {
   
   let ariaYaml;
   try {
-    ariaYaml = await page.locator('body').ariaSnapshot({ timeout: Math.min(remaining - 1000, 5000) });
+    ariaYaml = await page.locator(':root > body, :root > frameset').ariaSnapshot({ timeout: Math.min(remaining - 1000, 5000) });
   } catch (err) {
     log('warn', 'ariaSnapshot failed, retrying');
     const retryBudget = BUILDREFS_TIMEOUT_MS - (Date.now() - start);
     if (retryBudget < 2000) return refs;
     try {
-      ariaYaml = await page.locator('body').ariaSnapshot({ timeout: Math.min(retryBudget - 500, 5000) });
+      ariaYaml = await page.locator(':root > body, :root > frameset').ariaSnapshot({ timeout: Math.min(retryBudget - 500, 5000) });
     } catch (retryErr) {
       log('warn', 'ariaSnapshot retry failed, returning empty refs', { error: retryErr.message });
       return refs;
@@ -2513,7 +2516,7 @@ async function getAriaSnapshot(page) {
   });
   let mainYaml;
   try {
-    mainYaml = await page.locator('body').ariaSnapshot({ timeout: 5000 });
+    mainYaml = await page.locator(':root > body, :root > frameset').ariaSnapshot({ timeout: 5000 });
   } catch (err) {
     log('warn', 'getAriaSnapshot failed', { error: err.message });
     return null;
@@ -2847,7 +2850,7 @@ app.post('/pressure/cleanup', async (req, res) => {
  *   post:
  *     tags: [Tabs]
  *     summary: Create a new tab
- *     description: Creates a tab in the given session. Optionally navigates to an initial URL.
+ *     description: Creates a tab in the given session. Optionally navigates to an initial URL. A browser download is not recorded as a visited document.
  *     requestBody:
  *       required: true
  *       content:
@@ -2867,7 +2870,7 @@ app.post('/pressure/cleanup', async (req, res) => {
  *                 description: Legacy alias for sessionKey.
  *               url:
  *                 type: string
- *                 description: Optional initial URL.
+ *                 description: Optional initial HTTP/HTTPS URL. If supplied, must be a non-empty string; invalid values are rejected before session or tab creation.
  *               trace:
  *                 type: boolean
  *                 description: Enable Playwright tracing for this session (screenshots, DOM snapshots, network). Must be set on first tab creation; cannot be added to an existing session.
@@ -2879,6 +2882,9 @@ app.post('/pressure/cleanup', async (req, res) => {
  *             schema:
  *               type: object
  *               properties:
+ *                 downloadStarted:
+ *                   type: boolean
+ *                   description: Present and true when navigation starts a browser download instead of loading a document. Retrieve its artifact from the tab downloads endpoint.
  *                 tabId:
  *                   type: string
  *                 url:
@@ -2929,6 +2935,10 @@ app.post('/tabs', async (req, res) => {
     if (!userId || !resolvedSessionKey) {
       return res.status(400).json({ error: 'userId and sessionKey required' });
     }
+    if (url !== undefined) {
+      const urlErr = validateUrl(url);
+      if (urlErr) return res.status(400).json({ error: urlErr });
+    }
 
     // Session overflow redirect (Fly.io only) — if this machine is above its
     // fair share of sessions and the user doesn't already have one here,
@@ -2955,6 +2965,7 @@ app.post('/tabs', async (req, res) => {
         );
       }
       let session = await getSession(userId, { trace: !!trace });
+      let downloadStarted = false;
       
       let totalTabs = 0;
       for (const group of session.tabGroups.values()) totalTabs += group.size;
@@ -2988,11 +2999,10 @@ app.post('/tabs', async (req, res) => {
       }
 
       if (url) {
-        const urlErr = validateUrl(url);
-        if (urlErr) throw Object.assign(new Error(urlErr), { statusCode: 400 });
         tabState.lastRequestedUrl = url;
         try {
           const navigationResponse = await withPageLoadDuration('open_url', () => navigatePage(page, url));
+          downloadStarted = navigationResponse?.downloadStarted === true;
           tabState.lastNavigationHttpStatus = typeof navigationResponse?.status === 'function' ? navigationResponse.status() : null;
           recordNavSuccess(userId);
         } catch (navErr) {
@@ -3025,6 +3035,7 @@ app.post('/tabs', async (req, res) => {
               throw new Error('tab create abandoned after the route deadline');
             }
             const navigationResponse = await withPageLoadDuration('open_url', () => navigatePage(retryPage, url));
+            downloadStarted = navigationResponse?.downloadStarted === true;
             tabState.lastNavigationHttpStatus = typeof navigationResponse?.status === 'function' ? navigationResponse.status() : null;
             recordNavSuccess(userId);
           } else {
@@ -3034,7 +3045,7 @@ app.post('/tabs', async (req, res) => {
             throw navErr;
           }
         }
-        tabState.visitedUrls.add(url);
+        if (!downloadStarted) tabState.visitedUrls.add(url);
       }
       // The route deadline passed during navigation and the catch below has
       // begun discarding the tab, so do not announce it.
@@ -3047,6 +3058,7 @@ app.post('/tabs', async (req, res) => {
         url: page.url(),
         httpStatus: tabState.lastNavigationHttpStatus,
         navigationOk: tabState.lastNavigationHttpStatus === null || tabState.lastNavigationHttpStatus < 400,
+        ...(downloadStarted ? { downloadStarted: true } : {}),
       };
     })(), tabCreateRequestTimeoutMs(), 'tab create');
 
@@ -3088,7 +3100,7 @@ app.post('/tabs', async (req, res) => {
  *   post:
  *     tags: [Navigation]
  *     summary: Navigate a tab to a URL or macro
- *     description: Navigate to a URL or expand a search macro. Auto-creates tab if not found.
+ *     description: Navigate an existing tab to a URL or expand a search macro. Invalid URLs are rejected before browser or tab side effects. A supplied URL must be a non-empty HTTP/HTTPS string, even when a macro is also provided.
  *     parameters:
  *       - name: tabId
  *         in: path
@@ -3125,6 +3137,9 @@ app.post('/tabs', async (req, res) => {
  *             schema:
  *               type: object
  *               properties:
+ *                 downloadStarted:
+ *                   type: boolean
+ *                   description: Present and true when navigation starts a browser download instead of loading a document. The url remains the current document URL; retrieve the artifact from the tab downloads endpoint.
  *                 ok:
  *                   type: boolean
  *                 tabId:
@@ -3157,6 +3172,17 @@ app.post('/tabs/:tabId/navigate', async (req, res) => {
   try {
     const { userId, url, macro, query, sessionKey, listItemId } = req.body;
     if (!userId) return res.status(400).json({ error: 'userId required' });
+    if (url !== undefined) {
+      const urlErr = validateUrl(url);
+      if (urlErr) return res.status(400).json({ error: urlErr });
+    }
+    let targetUrl = url;
+    if (macro && macro !== '__NO__' && macro !== 'none' && macro !== 'null') {
+      targetUrl = expandMacro(macro, query) || url;
+    }
+    if (!targetUrl) return res.status(400).json({ error: 'url or macro required' });
+    const urlErr = validateUrl(targetUrl);
+    if (urlErr) return res.status(400).json({ error: urlErr });
 
     let session = sessions.get(normalizeUserId(userId));
     const found = session && findTab(session, tabId);
@@ -3169,18 +3195,10 @@ app.post('/tabs/:tabId/navigate', async (req, res) => {
       let tabState = found.tabState;
       tabState.toolCalls++; tabState.consecutiveTimeouts = 0; tabState.consecutiveFailures = 0;
       
-      let targetUrl = url;
-      if (macro && macro !== '__NO__' && macro !== 'none' && macro !== 'null') {
-        targetUrl = expandMacro(macro, query) || url;
-      }
       const searchFallbacks = getSearchFallbacks(macro, query);
       let searchFallback = null;
       let navigationHttpStatus = null;
-      
-      if (!targetUrl) throw new Error('url or macro required');
-      
-      const urlErr = validateUrl(targetUrl);
-      if (urlErr) throw new Error(urlErr);
+      let downloadStarted = false;
       
       return await withTabLock(tabId, async () => {
         const currentSessionKey = found?.listItemId || resolvedSessionKey;
@@ -3259,6 +3277,8 @@ app.post('/tabs/:tabId/navigate', async (req, res) => {
             ]);
             tabState.lastNavigationHttpStatus = typeof response?.status === 'function' ? response.status() : null;
             navigationHttpStatus = tabState.lastNavigationHttpStatus;
+            downloadStarted = response?.downloadStarted === true;
+            if (downloadStarted) return;
             if (response && response.status() >= 500) {
               tabState.lastSnapshot = null;
               throw Object.assign(
@@ -3427,6 +3447,10 @@ app.post('/tabs/:tabId/navigate', async (req, res) => {
             }
             throw navErr;
           }
+        }
+
+        if (downloadStarted) {
+          return { ok: true, tabId, url: tabState.page.url(), downloadStarted: true, httpStatus: null, navigationOk: true };
         }
 
         if (isGoogleSearch && proxyPool?.canRotateSessions && await isGoogleSearchBlocked(tabState.page)) {
@@ -6360,6 +6384,7 @@ app.get('/tabs', async (req, res) => {
  *   post:
  *     tags: [Legacy]
  *     summary: Open tab (OpenClaw format)
+ *     description: Opens a tab and navigates it to url. When the URL starts a browser download instead of a document navigation, the tab is still opened and the response includes downloadStarted true; retrieve the artifact from the tab downloads endpoint.
  *     deprecated: true
  *     requestBody:
  *       required: true
@@ -6377,11 +6402,15 @@ app.get('/tabs', async (req, res) => {
  *                 type: string
  *     responses:
  *       200:
- *         description: Tab opened.
+ *         description: Tab opened, including downloadStarted true when a browser download starts instead of a document navigation.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
+ *               properties:
+ *                 downloadStarted:
+ *                   type: boolean
+ *                   description: Present and true only when navigation started a browser download.
  *       400:
  *         description: Bad request.
  *         content:
@@ -6425,8 +6454,10 @@ app.post('/tabs/open', async (req, res) => {
     attachPopupHandler(page, userId, listItemId);
     refreshActiveTabsGauge();
     
+    let downloadStarted = false;
     try {
-      await withPageLoadDuration('open_url', () => navigatePage(page, url));
+      const navigationResponse = await withPageLoadDuration('open_url', () => navigatePage(page, url));
+      downloadStarted = navigationResponse?.downloadStarted === true;
       recordNavSuccess(userId);
     } catch (navErr) {
       if ((isProxyError(navErr) || isTimeoutError(navErr)) && proxyPool?.canRotateSessions) {
@@ -6448,7 +6479,8 @@ app.post('/tabs/open', async (req, res) => {
         releasePageLease(session, lease);
         attachPopupHandler(page, userId, listItemId);
         refreshActiveTabsGauge();
-        await withPageLoadDuration('open_url', () => navigatePage(page, url));
+        const navigationResponse = await withPageLoadDuration('open_url', () => navigatePage(page, url));
+        downloadStarted = navigationResponse?.downloadStarted === true;
         recordNavSuccess(userId);
       } else {
         if (recordNavFailure(userId)) {
@@ -6457,7 +6489,7 @@ app.post('/tabs/open', async (req, res) => {
         throw navErr;
       }
     }
-    tabState.visitedUrls.add(url);
+    if (!downloadStarted) tabState.visitedUrls.add(url);
     
     log('info', 'openclaw tab opened', { reqId: req.reqId, tabId, url: page.url() });
     res.json({ 
@@ -6465,7 +6497,8 @@ app.post('/tabs/open', async (req, res) => {
       targetId: tabId,
       tabId,
       url: page.url(),
-      title: await page.title().catch(() => '')
+      title: await page.title().catch(() => ''),
+      ...(downloadStarted ? { downloadStarted: true } : {}),
     });
   } catch (err) {
     log('error', 'openclaw tab open failed', { reqId: req.reqId, error: err.message });
@@ -6562,7 +6595,7 @@ app.post('/stop', async (req, res) => {
  *   post:
  *     tags: [Legacy]
  *     summary: Navigate (OpenClaw format)
- *     description: Navigate with targetId in body instead of path param.
+ *     description: Navigate with targetId in body instead of path param. Invalid or non-string HTTP/HTTPS URLs return 400 before tab side effects. Downloads return success with downloadStarted true; retrieve the artifact from the tab downloads endpoint.
  *     deprecated: true
  *     requestBody:
  *       required: true
@@ -6580,7 +6613,7 @@ app.post('/stop', async (req, res) => {
  *                 type: string
  *     responses:
  *       200:
- *         description: Navigation result.
+ *         description: Navigation result, including downloadStarted true when a browser download starts instead of a document navigation.
  *         content:
  *           application/json:
  *             schema:
@@ -6621,8 +6654,11 @@ app.post('/navigate', async (req, res) => {
     tabState.toolCalls++; tabState.consecutiveTimeouts = 0; tabState.consecutiveFailures = 0;
     
     const result = await withTabLock(targetId, async () => {
-      await withPageLoadDuration('navigate', () => navigatePage(tabState.page, url));
+      const response = await withPageLoadDuration('navigate', () => navigatePage(tabState.page, url));
       recordNavSuccess(userId);
+      if (response?.downloadStarted) {
+        return { ok: true, targetId, url: tabState.page.url(), downloadStarted: true };
+      }
       tabState.visitedUrls.add(url);
       tabState.lastSnapshot = null;
       
